@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>WebSocket Notifications</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+</head>
+<body>
+<h2>Информация о доставках:</h2>
+<div id="deliveries"></div>
+<hr>
+<h2>Скидки на заказы:</h2>
+<div id="discounts"></div>
+
+<script>
+    var socket = new SockJS('http://localhost:8082/ws');
+    var stompClient = Stomp.over(socket);
+
+    stompClient.connect({}, function(frame) {
+        console.log("Connected: " + frame);
+
+        stompClient.subscribe('/topic/notifications', function(notification) {
+            console.log("Received notification: " + notification.body);
+
+            if (notification.body.startsWith("К заказу с ID")) {
+                addDiscountMessage(notification.body);
+            } else {
+                try {
+                    var message = JSON.parse(notification.body);
+                    if (message.type === "delivery") {
+                        handleDeliveryUpdate(message.payload);
+                    } else {
+                        console.warn("Unknown message type:", message.type);
+                    }
+                } catch (e) {
+                    console.error("Error processing message:", e);
+                }
+            }
+        });
+    }, function(error) {
+        console.error("Error connecting:", error);
+    });
+
+    function handleDeliveryUpdate(delivery) {
+        var deliveriesDiv = document.getElementById("deliveries");
+        var existingDelivery = document.getElementById(delivery.orderId);
+
+        if (delivery.distance === 0) {
+            // Удаляем заказ из DOM
+            if (existingDelivery) {
+                deliveriesDiv.removeChild(existingDelivery);
+                console.log(`Заказ ${delivery.orderId} доставлен и удален.`);
+            }
+        } else if (existingDelivery) {
+            // Обновляем данные
+            existingDelivery.querySelector(".distance").textContent = `Расстояние: ${delivery.distance} км`;
+            existingDelivery.querySelector(".time").textContent = `Время доставки: ${delivery.estimatedTimeMinutes} минут и ${delivery.estimatedTimeSeconds} секунд`;
+        } else {
+            // Добавляем новый заказ
+            var deliveryDiv = document.createElement("div");
+            deliveryDiv.id = delivery.orderId;
+            deliveryDiv.innerHTML = `
+            <h3>Заказ: ${delivery.orderId}</h3>
+            <p class="distance">Расстояние: ${delivery.distance} км</p>
+            <p class="time">Время доставки: ${delivery.estimatedTimeMinutes} минут и ${delivery.estimatedTimeSeconds} секунд</p>
+        `;
+            deliveriesDiv.appendChild(deliveryDiv);
+        }
+    }
+
+
+
+    function addDiscountMessage(discount) {
+        var discountsDiv = document.getElementById("discounts");
+        var discountMessage = document.createElement("div");
+        discountMessage.textContent = discount;
+        discountsDiv.appendChild(discountMessage);
+    }
+</script>
+
+</body>
+</html>
